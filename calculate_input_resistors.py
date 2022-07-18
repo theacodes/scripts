@@ -1,5 +1,7 @@
 """Calculates the resistors needed to scale down an input voltage range"""
 
+from wintertools.print import print
+
 
 def calculate_voltage_range(min_in, max_in, rf=47_000, radj=180_000):
     rin = 100_000
@@ -93,6 +95,10 @@ R_SERIES.update(
 )
 
 
+def _transfer_func(V1, R1, V2, R2, Rf):
+    return -1 * Rf * ((V1 / R1 + V2 / R2))
+
+
 def calculate_component_values(min_in, max_in):
     # inverting op amp
     max_out = 0
@@ -108,19 +114,23 @@ def calculate_component_values(min_in, max_in):
             rfval = rfmul * rf_base
             adjval = adjmul * adj_base
 
-            min_out_candidate = abs((rfval / rin * min_in) + (rfval / adjval * adj_v))
-            max_out_candidate = abs((rfval / rin * max_in) + (rfval / adjval * adj_v))
-            zero_v_value = abs((rfval / rin * 0) + (rfval / adjval * adj_v))
+            min_out_candidate = _transfer_func(V1=min_in, R1=rin, V2=-10, R2=adjval, Rf=rfval)
+            max_out_candidate = _transfer_func(V1=max_in, R1=rin, V2=-10, R2=adjval, Rf=rfval)
+            spread = min_out_candidate - max_out_candidate
+            zero_v_value = _transfer_func(V1=0, R1=rin, V2=-10, R2=adjval, Rf=rfval)
 
-            if abs(min_out_candidate - min_out) > 0.1:
+            if min_out_candidate > min_out:
                 continue
 
-            if abs(max_out_candidate - max_out) > 0.1:
+            if max_out_candidate < max_out:
+                continue
+
+            if spread < min_out * 0.9:
                 continue
 
             print(
-                f"Vmin: {min_out_candidate:.2f} Vmax: {max_out_candidate:.2f} Spread {abs(max_out_candidate-min_out_candidate):.2f} V0: {zero_v_value:.2f} Rf: {rfval:.0f} Radj: {adjval:.0f}"
+                f"V(in) = {min_in:.2f} :arrow_right: {max_in:.2f}, V(out) = {max_out_candidate:.2f} :arrow_right: {min_out_candidate:.2f} ({spread:.2f}), 0 V = {zero_v_value:.2f} V, Rin2: {adjval/1000:,.1f} kΩ, Rf: {rfval/1000:.1f} kΩ "
             )
 
 
-calculate_component_values(-5, +5)
+calculate_component_values(-0.5, 6.1)
